@@ -26,6 +26,12 @@ The container is isolated by default. The tmux phase requires Claude Code to rea
 
 The runner handles the first-run theme prompt and the API-key confirmation prompt, but it does not choose a login provider for you.
 
+## Current WIP
+
+`make integration-tests` currently fails on a machine that does not provide Claude auth to the Docker container. That failure is intentional: the test must not pass unless Claude Code reaches the interactive prompt and actually invokes the configured `statusLine` command.
+
+TODO: implement `make claude-integration-test-auth` as a separate, explicit helper for preparing the isolated container auth path. That target should make it clear whether it uses `ANTHROPIC_API_KEY`, a mounted Claude config/token, or another supported Claude Code auth mechanism. Keep this separate from `make integration-tests` so the default test command does not silently copy host credentials into Docker.
+
 Pass any required environment or mounts through Docker like this:
 
 ```bash

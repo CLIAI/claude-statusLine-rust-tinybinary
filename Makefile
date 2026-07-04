@@ -26,6 +26,8 @@ integration-tests:
 integration-tests-keep-docker-artifacts:
 	KEEP_DOCKER_ARTIFACTS=1 integration-tests/run.sh
 
+# TODO: add claude-integration-test-auth to provision or mount Claude auth
+# for the isolated Docker tmux tests without copying host state by default.
 clean-docker-artifacts:
 	integration-tests/clean-docker-artifacts.sh
 

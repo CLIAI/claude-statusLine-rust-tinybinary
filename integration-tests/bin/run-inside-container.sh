@@ -35,6 +35,8 @@ drive_onboarding_if_needed() {
   local session=$1
   local capture=$2
 
+  # TODO: replace this limited prompt driving with make claude-integration-test-auth
+  # once the project has an explicit, documented way to pass Claude auth into Docker.
   if grep -q 'Choose the text style' "${capture}"; then
     tmux send-keys -t "${session}" Enter
     return 0
@@ -85,6 +87,8 @@ run_case() {
     fi
 
     if grep -q 'Select login method' "${capture}"; then
+      # TODO: make claude-integration-test-auth should prevent reaching this
+      # unauthenticated screen before the statusLine scenarios run.
       break
     fi
   done
