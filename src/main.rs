@@ -20,6 +20,7 @@ struct Options {
     format: Option<String>,
     show_reset: bool,
     debug_log_dir: Option<String>,
+    terse: bool,
 }
 
 impl Default for Options {
@@ -29,6 +30,7 @@ impl Default for Options {
             format: None,
             show_reset: true,
             debug_log_dir: None,
+            terse: false,
         }
     }
 }
@@ -143,7 +145,7 @@ where
             value if value.starts_with("--style=") => {
                 options.style = parse_style_name(&value["--style=".len()..])?;
             }
-            "--compact" => options.style = Style::Compact,
+            "--compact" | "-c" => options.terse = true,
             "--full" => options.style = Style::Full,
             "--weekly" => options.style = Style::Weekly,
             "--debug" => options.style = Style::Debug,
@@ -204,7 +206,7 @@ fn parse_on_off(value: &str) -> Result<bool, String> {
 
 fn usage(prefix: &str) -> String {
     format!(
-        "{prefix}\nusage: claude-statusline-rust-tinybinary [--style compact|full|weekly|debug] [--reset-status on|off] [--format FORMAT] [--debug-log-dir DIR]"
+        "{prefix}\nusage: claude-statusline-rust-tinybinary [--style compact|full|weekly|debug] [--compact|-c] [--reset-status on|off] [--format FORMAT] [--debug-log-dir DIR]"
     )
 }
 
@@ -215,6 +217,10 @@ fn render(options: &Options, s: &Status) -> String {
 fn render_at(options: &Options, s: &Status, now: Option<u64>) -> String {
     if let Some(format) = &options.format {
         return render_format(format, s, now, options.show_reset);
+    }
+
+    if options.terse {
+        return render_terse(s, now, options.show_reset);
     }
 
     match options.style {
@@ -261,6 +267,25 @@ fn render_at(options: &Options, s: &Status, now: Option<u64>) -> String {
                 .unwrap_or_else(|| "n/a".to_string())
         ),
     }
+}
+
+fn render_terse(s: &Status, now: Option<u64>, show_reset: bool) -> String {
+    let reset = if show_reset {
+        fmt_reset_at(s.week_reset, now)
+            .map(|reset| format!("r{reset}"))
+            .unwrap_or_default()
+    } else {
+        String::new()
+    };
+
+    format!(
+        "{}|{}|c{}%|w{}|{}",
+        s.effort,
+        s.thinking,
+        s.ctx_pct,
+        fmt_week_pct(s.week_pct),
+        reset
+    )
 }
 
 fn render_format(format: &str, s: &Status, now: Option<u64>, show_reset: bool) -> String {
@@ -658,6 +683,53 @@ mod tests {
     }
 
     #[test]
+    fn renders_terse_compact_output() {
+        let status = sample_status();
+        let render_options = Options {
+            terse: true,
+            ..Options::default()
+        };
+
+        assert_eq!(
+            render_at(&render_options, &status, Some(SAMPLE_NOW)),
+            "max|T|c34%|w41%|r2d7h"
+        );
+    }
+
+    #[test]
+    fn renders_terse_output_with_empty_reset_slot() {
+        let value: Value = serde_json::from_str(
+            r#"{"effort":{"level":"xhigh"},"thinking":{"enabled":true},"context_window":{"used_percentage":55},"rate_limits":{"seven_day":{"used_percentage":12}}}"#,
+        )
+        .unwrap();
+        let status = Status::from_json(&value);
+        let render_options = Options {
+            terse: true,
+            ..Options::default()
+        };
+
+        assert_eq!(
+            render_at(&render_options, &status, Some(SAMPLE_NOW)),
+            "xhigh|T|c55%|w12%|"
+        );
+    }
+
+    #[test]
+    fn terse_output_respects_hidden_reset_status() {
+        let status = sample_status();
+        let render_options = Options {
+            terse: true,
+            show_reset: false,
+            ..Options::default()
+        };
+
+        assert_eq!(
+            render_at(&render_options, &status, Some(SAMPLE_NOW)),
+            "max|T|c34%|w41%|"
+        );
+    }
+
+    #[test]
     fn renders_minimal_compact_output_with_fallbacks() {
         let value: Value = serde_json::from_str(
             r#"{"model":{"display_name":"Opus"},"context_window":{"used_percentage":34}}"#,
@@ -755,6 +827,20 @@ mod tests {
             Style::Compact
         );
         assert!(parse_options(["claude-statusline-rust-tinybinary", "--style", "nope"]).is_err());
+    }
+
+    #[test]
+    fn parses_terse_compact_flags() {
+        assert!(
+            parse_options(["claude-statusline-rust-tinybinary", "--compact"])
+                .unwrap()
+                .terse
+        );
+        assert!(
+            parse_options(["claude-statusline-rust-tinybinary", "-c"])
+                .unwrap()
+                .terse
+        );
     }
 
     #[test]
