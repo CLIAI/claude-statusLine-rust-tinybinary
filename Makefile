@@ -24,7 +24,7 @@ size: build
 	ls -lh $(BIN)
 
 sample: build
-	@printf '%s\n' '$(SAMPLE_JSON)' | $(BIN) --style compact
+	@printf '%s\n' '$(SAMPLE_JSON)' | $(BIN) --style default
 	@printf '\n'
 	@printf '%s\n' '$(SAMPLE_JSON)' | $(BIN) --style full
 	@printf '\n'

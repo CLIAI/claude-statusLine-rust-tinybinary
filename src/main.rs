@@ -8,7 +8,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Style {
-    Compact,
+    Default,
     Full,
     Weekly,
     Debug,
@@ -26,7 +26,7 @@ struct Options {
 impl Default for Options {
     fn default() -> Self {
         Self {
-            style: Style::Compact,
+            style: Style::Default,
             format: None,
             show_reset: true,
             debug_log_dir: None,
@@ -188,7 +188,7 @@ where
 
 fn parse_style_name(name: &str) -> Result<Style, String> {
     match name {
-        "compact" => Ok(Style::Compact),
+        "default" => Ok(Style::Default),
         "full" => Ok(Style::Full),
         "weekly" => Ok(Style::Weekly),
         "debug" => Ok(Style::Debug),
@@ -206,7 +206,7 @@ fn parse_on_off(value: &str) -> Result<bool, String> {
 
 fn usage(prefix: &str) -> String {
     format!(
-        "{prefix}\nusage: claude-statusline-rust-tinybinary [--style compact|full|weekly|debug] [--compact|-c] [--reset-status on|off] [--format FORMAT] [--debug-log-dir DIR]"
+        "{prefix}\nusage: claude-statusline-rust-tinybinary [--style default|full|weekly|debug] [--compact|-c] [--reset-status on|off] [--format FORMAT] [--debug-log-dir DIR]"
     )
 }
 
@@ -224,7 +224,7 @@ fn render_at(options: &Options, s: &Status, now: Option<u64>) -> String {
     }
 
     match options.style {
-        Style::Compact => format!(
+        Style::Default => format!(
             "{} │ e:{} │ T:{} │ ctx {} {}% │ week {}",
             s.model,
             s.effort,
@@ -279,7 +279,7 @@ fn render_terse(style: Style, s: &Status, now: Option<u64>, show_reset: bool) ->
     };
 
     match style {
-        Style::Compact => format!(
+        Style::Default => format!(
             "{}|{}|{}|c{}%|w{}|{}",
             s.model,
             s.effort,
@@ -684,7 +684,7 @@ mod tests {
         let status = sample_status();
 
         assert_eq!(
-            render_at(&options(Style::Compact), &status, Some(SAMPLE_NOW)),
+            render_at(&options(Style::Default), &status, Some(SAMPLE_NOW)),
             "Opus 4.7 │ e:max │ T:T │ ctx ███░░░░░░░ 34% │ week 41% reset:2d7h"
         );
     }
@@ -820,7 +820,7 @@ mod tests {
         let status = Status::from_json(&value);
 
         assert_eq!(
-            render_at(&options(Style::Compact), &status, Some(SAMPLE_NOW)),
+            render_at(&options(Style::Default), &status, Some(SAMPLE_NOW)),
             "Opus │ e:na │ T:? │ ctx ███░░░░░░░ 34% │ week n/a"
         );
     }
@@ -906,7 +906,10 @@ mod tests {
             parse_options(["claude-statusline-rust-tinybinary"])
                 .unwrap()
                 .style,
-            Style::Compact
+            Style::Default
+        );
+        assert!(
+            parse_options(["claude-statusline-rust-tinybinary", "--style", "compact"]).is_err()
         );
         assert!(parse_options(["claude-statusline-rust-tinybinary", "--style", "nope"]).is_err());
     }

@@ -28,7 +28,7 @@ Using `PATH`:
 {
   "statusLine": {
     "type": "command",
-    "command": "claude-statusline-rust-tinybinary --style compact",
+    "command": "claude-statusline-rust-tinybinary --style default",
     "padding": 0
   }
 }
@@ -52,7 +52,7 @@ With debug capture enabled:
 {
   "statusLine": {
     "type": "command",
-    "command": "claude-statusline-rust-tinybinary --style compact --debug-log-dir ~/.cache/claude-statusline-rust-tinybinary",
+    "command": "claude-statusline-rust-tinybinary --style default --debug-log-dir ~/.cache/claude-statusline-rust-tinybinary",
     "padding": 0
   }
 }
@@ -71,18 +71,18 @@ Fields can be null or missing, especially early in a session, after compaction, 
 ## Styles
 
 ```bash
-claude-statusline-rust-tinybinary --style compact
+claude-statusline-rust-tinybinary --style default
 claude-statusline-rust-tinybinary --style full
 claude-statusline-rust-tinybinary --style weekly
 claude-statusline-rust-tinybinary --style debug
-claude-statusline-rust-tinybinary -s compact
+claude-statusline-rust-tinybinary -s default
 claude-statusline-rust-tinybinary --full
 claude-statusline-rust-tinybinary --full --reset-status=off
 claude-statusline-rust-tinybinary --full --compact
 claude-statusline-rust-tinybinary --weekly -c
 ```
 
-Default style is `compact`.
+Default style is `default`.
 
 `--compact` or `-c` is a modifier. It keeps the selected style's fields and only removes spacing, long labels, and visual separators:
 
@@ -201,7 +201,7 @@ Manual smoke test:
 
 ```bash
 echo '{"model":{"display_name":"Opus"},"context_window":{"used_percentage":34}}' \
-  | target/release/claude-statusline-rust-tinybinary --style compact
+  | target/release/claude-statusline-rust-tinybinary --style default
 ```
 
 Expected shape:
