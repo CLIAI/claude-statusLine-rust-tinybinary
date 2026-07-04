@@ -32,88 +32,6 @@ Claude Code `statusLine` can run a command, passes JSON session data to that com
 
 The point is lower startup and processing overhead than Bash pipelines that invoke tools such as `cat`, `jq`, `awk`, `grep`, and `date`. The implementation is intentionally simple and dependency-light.
 
-## Install
-
-```bash
-cargo install --path . --locked
-```
-
-Or build locally:
-
-```bash
-cargo build --release
-```
-
-## Configure Claude Code
-
-Fast helper:
-
-```bash
-./add-to-claude-settings.py --help
-./add-to-claude-settings.py --full --compact
-./add-to-claude-settings.py --style default --debug-log-dir ~/.cache/claude-statusline-rust-tinybinary
-```
-
-The helper updates `~/.claude/settings.json`, preserves other top-level settings, and creates a timestamped backup when replacing an existing file.
-
-Using `PATH`:
-
-```json
-{
-  "statusLine": {
-    "type": "command",
-    "command": "claude-statusline-rust-tinybinary --style default",
-    "padding": 0
-  }
-}
-```
-
-Full style with compact presentation:
-
-```json
-{
-  "statusLine": {
-    "type": "command",
-    "command": "claude-statusline-rust-tinybinary --style full --compact",
-    "padding": 0
-  }
-}
-```
-
-Using a direct path:
-
-```json
-{
-  "statusLine": {
-    "type": "command",
-    "command": "~/.cargo/bin/claude-statusline-rust-tinybinary --style full",
-    "padding": 0
-  }
-}
-```
-
-With debug capture enabled:
-
-```json
-{
-  "statusLine": {
-    "type": "command",
-    "command": "claude-statusline-rust-tinybinary --style full --compact --debug-log-dir ~/.cache/claude-statusline-rust-tinybinary",
-    "padding": 0
-  }
-}
-```
-
-Debug capture writes one JSONL file per status-line invocation, named like:
-
-```text
-~/.cache/claude-statusline-rust-tinybinary/260704-181530-12345.jsonl
-```
-
-Each file contains the JSON payload Claude Code passed on stdin. If the input is malformed, the file contains a small record with `bad_json` and `raw` fields. This is useful when `week` or `reset` shows `n/a`, because the captured payload shows whether Claude Code actually sent `rate_limits.seven_day.used_percentage` and `rate_limits.seven_day.resets_at`.
-
-Fields can be null or missing, especially early in a session, after compaction, or when a model or plan does not provide a field. Missing values are handled with compact fallbacks.
-
 ## Styles
 
 ```bash
@@ -199,6 +117,88 @@ Sample input:
   }
 }
 ```
+
+## Install
+
+```bash
+cargo install --path . --locked
+```
+
+Or build locally:
+
+```bash
+cargo build --release
+```
+
+## Configure Claude Code
+
+Fast helper:
+
+```bash
+./add-to-claude-settings.py --help
+./add-to-claude-settings.py --full --compact
+./add-to-claude-settings.py --style default --debug-log-dir ~/.cache/claude-statusline-rust-tinybinary
+```
+
+The helper updates `~/.claude/settings.json`, preserves other top-level settings, and creates a timestamped backup when replacing an existing file.
+
+Using `PATH`:
+
+```json
+{
+  "statusLine": {
+    "type": "command",
+    "command": "claude-statusline-rust-tinybinary --style default",
+    "padding": 0
+  }
+}
+```
+
+Full style with compact presentation:
+
+```json
+{
+  "statusLine": {
+    "type": "command",
+    "command": "claude-statusline-rust-tinybinary --style full --compact",
+    "padding": 0
+  }
+}
+```
+
+Using a direct path:
+
+```json
+{
+  "statusLine": {
+    "type": "command",
+    "command": "~/.cargo/bin/claude-statusline-rust-tinybinary --style full",
+    "padding": 0
+  }
+}
+```
+
+With debug capture enabled:
+
+```json
+{
+  "statusLine": {
+    "type": "command",
+    "command": "claude-statusline-rust-tinybinary --style full --compact --debug-log-dir ~/.cache/claude-statusline-rust-tinybinary",
+    "padding": 0
+  }
+}
+```
+
+Debug capture writes one JSONL file per status-line invocation, named like:
+
+```text
+~/.cache/claude-statusline-rust-tinybinary/260704-181530-12345.jsonl
+```
+
+Each file contains the JSON payload Claude Code passed on stdin. If the input is malformed, the file contains a small record with `bad_json` and `raw` fields. This is useful when `week` or `reset` shows `n/a`, because the captured payload shows whether Claude Code actually sent `rate_limits.seven_day.used_percentage` and `rate_limits.seven_day.resets_at`.
+
+Fields can be null or missing, especially early in a session, after compaction, or when a model or plan does not provide a field. Missing values are handled with compact fallbacks.
 
 ## Fields used
 
