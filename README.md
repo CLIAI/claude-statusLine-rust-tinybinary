@@ -121,7 +121,7 @@ Sample input:
 ## Install
 
 ```bash
-cargo install --path . --locked
+cargo install --path . --locked # or `make install`
 ```
 
 Or build locally:
