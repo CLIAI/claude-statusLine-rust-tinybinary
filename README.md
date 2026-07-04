@@ -1,4 +1,4 @@
-# claude-statusline
+# claude-statusline-rust-tinybinary
 
 Tiny Rust status line renderer for Claude Code.
 
@@ -28,7 +28,7 @@ Using `PATH`:
 {
   "statusLine": {
     "type": "command",
-    "command": "claude-statusline --style compact",
+    "command": "claude-statusline-rust-tinybinary --style compact",
     "padding": 0
   }
 }
@@ -40,7 +40,7 @@ Using a direct path:
 {
   "statusLine": {
     "type": "command",
-    "command": "~/.cargo/bin/claude-statusline --style full",
+    "command": "~/.cargo/bin/claude-statusline-rust-tinybinary --style full",
     "padding": 0
   }
 }
@@ -51,11 +51,11 @@ Fields can be null or missing, especially early in a session, after compaction, 
 ## Styles
 
 ```bash
-claude-statusline --style compact
-claude-statusline --style full
-claude-statusline --style weekly
-claude-statusline --style debug
-claude-statusline -s compact
+claude-statusline-rust-tinybinary --style compact
+claude-statusline-rust-tinybinary --style full
+claude-statusline-rust-tinybinary --style weekly
+claude-statusline-rust-tinybinary --style debug
+claude-statusline-rust-tinybinary -s compact
 ```
 
 Default style is `compact`.
@@ -150,7 +150,7 @@ Manual smoke test:
 
 ```bash
 echo '{"model":{"display_name":"Opus"},"context_window":{"used_percentage":34}}' \
-  | target/release/claude-statusline --style compact
+  | target/release/claude-statusline-rust-tinybinary --style compact
 ```
 
 Expected shape:

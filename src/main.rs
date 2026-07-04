@@ -134,7 +134,9 @@ fn parse_style_name(name: &str) -> Result<Style, String> {
 }
 
 fn usage(prefix: &str) -> String {
-    format!("{prefix}\nusage: claude-statusline [--style compact|full|weekly|debug]")
+    format!(
+        "{prefix}\nusage: claude-statusline-rust-tinybinary [--style compact|full|weekly|debug]"
+    )
 }
 
 fn render(style: Style, s: &Status) -> String {
@@ -379,14 +381,17 @@ mod tests {
     #[test]
     fn parses_styles() {
         assert_eq!(
-            parse_style(["claude-statusline", "--style", "full"]).unwrap(),
+            parse_style(["claude-statusline-rust-tinybinary", "--style", "full"]).unwrap(),
             Style::Full
         );
         assert_eq!(
-            parse_style(["claude-statusline", "-s", "weekly"]).unwrap(),
+            parse_style(["claude-statusline-rust-tinybinary", "-s", "weekly"]).unwrap(),
             Style::Weekly
         );
-        assert_eq!(parse_style(["claude-statusline"]).unwrap(), Style::Compact);
-        assert!(parse_style(["claude-statusline", "--style", "nope"]).is_err());
+        assert_eq!(
+            parse_style(["claude-statusline-rust-tinybinary"]).unwrap(),
+            Style::Compact
+        );
+        assert!(parse_style(["claude-statusline-rust-tinybinary", "--style", "nope"]).is_err());
     }
 }

@@ -1,5 +1,5 @@
 [package]
-name = "claude-statusline"
+name = "claude-statusline-rust-tinybinary"
 version = "0.1.0"
 edition = "2021"
 description = "Fast Rust status line renderer for Claude Code"
