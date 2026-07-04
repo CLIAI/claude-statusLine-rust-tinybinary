@@ -220,7 +220,7 @@ fn render_at(options: &Options, s: &Status, now: Option<u64>) -> String {
     }
 
     if options.terse {
-        return render_terse(s, now, options.show_reset);
+        return render_terse(options.style, s, now, options.show_reset);
     }
 
     match options.style {
@@ -269,7 +269,7 @@ fn render_at(options: &Options, s: &Status, now: Option<u64>) -> String {
     }
 }
 
-fn render_terse(s: &Status, now: Option<u64>, show_reset: bool) -> String {
+fn render_terse(style: Style, s: &Status, now: Option<u64>, show_reset: bool) -> String {
     let reset = if show_reset {
         fmt_reset_at(s.week_reset, now)
             .map(|reset| format!("r{reset}"))
@@ -278,14 +278,51 @@ fn render_terse(s: &Status, now: Option<u64>, show_reset: bool) -> String {
         String::new()
     };
 
-    format!(
-        "{}|{}|c{}%|w{}|{}",
-        s.effort,
-        s.thinking,
-        s.ctx_pct,
-        fmt_week_pct(s.week_pct),
-        reset
-    )
+    match style {
+        Style::Compact => format!(
+            "{}|{}|{}|c{}%|w{}|{}",
+            s.model,
+            s.effort,
+            s.thinking,
+            s.ctx_pct,
+            fmt_week_pct(s.week_pct),
+            reset
+        ),
+        Style::Full => format!(
+            "{}|{}|{}|c{}/{}:{}%|w{}|{}|{}",
+            s.model,
+            s.effort,
+            s.thinking,
+            fmt_tokens(s.ctx_tokens),
+            fmt_tokens(s.ctx_window),
+            s.ctx_pct,
+            fmt_week_pct(s.week_pct),
+            reset,
+            fmt_cost(s.cost_usd)
+        ),
+        Style::Weekly => format!(
+            "{}|c{}%|w{}|{}",
+            s.model,
+            s.ctx_pct,
+            fmt_week_pct(s.week_pct),
+            reset
+        ),
+        Style::Debug => format!(
+            "m={}|e={}|t={}|cp={}|ct={}|cw={}|wp={}|wr={}",
+            s.model,
+            s.effort,
+            s.thinking,
+            s.ctx_pct,
+            s.ctx_tokens,
+            s.ctx_window,
+            s.week_pct
+                .map(fmt_percent)
+                .unwrap_or_else(|| "n/a".to_string()),
+            s.week_reset
+                .map(|reset| reset.to_string())
+                .unwrap_or_else(|| "n/a".to_string())
+        ),
+    }
 }
 
 fn render_format(format: &str, s: &Status, now: Option<u64>, show_reset: bool) -> String {
@@ -692,7 +729,52 @@ mod tests {
 
         assert_eq!(
             render_at(&render_options, &status, Some(SAMPLE_NOW)),
-            "max|T|c34%|w41%|r2d7h"
+            "Opus 4.7|max|T|c34%|w41%|r2d7h"
+        );
+    }
+
+    #[test]
+    fn renders_terse_full_output_with_full_fields() {
+        let status = sample_status();
+        let render_options = Options {
+            style: Style::Full,
+            terse: true,
+            ..Options::default()
+        };
+
+        assert_eq!(
+            render_at(&render_options, &status, Some(SAMPLE_NOW)),
+            "Opus 4.7|max|T|c68k/200k:34%|w41%|r2d7h|$2.31"
+        );
+    }
+
+    #[test]
+    fn renders_terse_weekly_output_with_weekly_fields() {
+        let status = sample_status();
+        let render_options = Options {
+            style: Style::Weekly,
+            terse: true,
+            ..Options::default()
+        };
+
+        assert_eq!(
+            render_at(&render_options, &status, Some(SAMPLE_NOW)),
+            "Opus 4.7|c34%|w41%|r2d7h"
+        );
+    }
+
+    #[test]
+    fn renders_terse_debug_output_with_debug_fields() {
+        let status = sample_status();
+        let render_options = Options {
+            style: Style::Debug,
+            terse: true,
+            ..Options::default()
+        };
+
+        assert_eq!(
+            render_at(&render_options, &status, Some(SAMPLE_NOW)),
+            "m=Opus 4.7|e=max|t=T|cp=34|ct=68000|cw=200000|wp=41|wr=1898780400"
         );
     }
 
@@ -710,7 +792,7 @@ mod tests {
 
         assert_eq!(
             render_at(&render_options, &status, Some(SAMPLE_NOW)),
-            "xhigh|T|c55%|w12%|"
+            "?|xhigh|T|c55%|w12%|"
         );
     }
 
@@ -725,7 +807,7 @@ mod tests {
 
         assert_eq!(
             render_at(&render_options, &status, Some(SAMPLE_NOW)),
-            "max|T|c34%|w41%|"
+            "Opus 4.7|max|T|c34%|w41%|"
         );
     }
 
