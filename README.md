@@ -2,6 +2,30 @@
 
 Tiny Rust status line renderer for Claude Code.
 
+## Kickstarter
+
+Claude Code status lines are most useful when they are fast and dense. This tool replaces shell pipelines like `jq | awk | date` with one tiny Rust binary that reads Claude's JSON once and prints one line.
+
+Fast start:
+
+```bash
+make install && ./add-to-claude-settings.py --full --compact
+```
+
+That writes this kind of status line:
+
+```text
+Opus 4.7|max|T|c68k/200k:34%|w41%|r2d7h|$2.31
+```
+
+For capture while debugging missing fields such as `week` or `reset`:
+
+```bash
+make install && ./add-to-claude-settings.py --full --compact --debug-log-dir ~/.cache/claude-statusline-rust-tinybinary
+```
+
+The helper is optional. It is a portable Python 3 script using only the standard library, and the manual `settings.json` examples below show the exact configuration it writes.
+
 ## Why
 
 Claude Code `statusLine` can run a command, passes JSON session data to that command on stdin, and displays stdout. This binary reads stdin once, parses the JSON once, and prints one compact line.
@@ -22,6 +46,16 @@ cargo build --release
 
 ## Configure Claude Code
 
+Fast helper:
+
+```bash
+./add-to-claude-settings.py --help
+./add-to-claude-settings.py --full --compact
+./add-to-claude-settings.py --style default --debug-log-dir ~/.cache/claude-statusline-rust-tinybinary
+```
+
+The helper updates `~/.claude/settings.json`, preserves other top-level settings, and creates a timestamped backup when replacing an existing file.
+
 Using `PATH`:
 
 ```json
@@ -29,6 +63,18 @@ Using `PATH`:
   "statusLine": {
     "type": "command",
     "command": "claude-statusline-rust-tinybinary --style default",
+    "padding": 0
+  }
+}
+```
+
+Full style with compact presentation:
+
+```json
+{
+  "statusLine": {
+    "type": "command",
+    "command": "claude-statusline-rust-tinybinary --style full --compact",
     "padding": 0
   }
 }
@@ -52,7 +98,7 @@ With debug capture enabled:
 {
   "statusLine": {
     "type": "command",
-    "command": "claude-statusline-rust-tinybinary --style default --debug-log-dir ~/.cache/claude-statusline-rust-tinybinary",
+    "command": "claude-statusline-rust-tinybinary --style full --compact --debug-log-dir ~/.cache/claude-statusline-rust-tinybinary",
     "padding": 0
   }
 }
@@ -116,6 +162,8 @@ Format tokens:
 ```text
 Opus 4.7 │ e:max │ T:T │ ctx ███░░░░░░░ 34% │ week 41% reset:2d7h
 Opus 4.7 │ effort:max │ think:T │ ctx ███░░░░░░░ 68k/200k 34% │ week 41% reset:2d7h │ $2.31
+Opus 4.7|max|T|c68k/200k:34%|w41%|r2d7h|$2.31
+Opus 4.7|max|T|c68k/200k:34%|w41%||$2.31
 ```
 
 Sample input:
