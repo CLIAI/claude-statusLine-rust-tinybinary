@@ -24,6 +24,8 @@ struct Options {
     show_version: bool,
     print_version: bool,
     debug_log_dir: Option<String>,
+    // `--compact` must not change which fields a style contains. It only
+    // selects compact renderings for the same ingredients.
     terse: bool,
 }
 
@@ -156,6 +158,8 @@ where
             value if value.starts_with("--style=") => {
                 options.style = parse_style_name(&value["--style=".len()..])?;
             }
+            // Compact output is a representation modifier for the selected
+            // style, not a separate field set.
             "--compact" | "-c" => options.terse = true,
             "--full" => options.style = Style::Full,
             "--weekly" => options.style = Style::Weekly,
@@ -242,8 +246,16 @@ fn render_at(options: &Options, s: &Status, now: Option<u64>) -> String {
         return render_format(format, s, now, options.show_reset, options.show_version);
     }
 
+    // `--compact` is a representation modifier: it keeps the selected style's
+    // ingredients and renders each one in its compact form.
     if options.terse {
-        return render_terse(options.style, s, now, options.show_reset);
+        return render_terse(
+            options.style,
+            s,
+            now,
+            options.show_reset,
+            options.show_version,
+        );
     }
 
     match options.style {
@@ -257,6 +269,8 @@ fn render_at(options: &Options, s: &Status, now: Option<u64>) -> String {
             fmt_week_compact(s.week_pct, s.week_reset, now, options.show_reset)
         ),
         Style::Full => {
+            // Keep this field list mirrored in render_terse(Style::Full), using
+            // compact representations rather than dropping ingredients.
             let mut output = format!(
                 "{} │ effort:{} │ think:{} │ ctx {} {}/{} {}% │ week {} │ {}",
                 s.model,
@@ -299,7 +313,13 @@ fn render_at(options: &Options, s: &Status, now: Option<u64>) -> String {
     }
 }
 
-fn render_terse(style: Style, s: &Status, now: Option<u64>, show_reset: bool) -> String {
+fn render_terse(
+    style: Style,
+    s: &Status,
+    now: Option<u64>,
+    show_reset: bool,
+    show_version: bool,
+) -> String {
     let reset = if show_reset {
         fmt_reset_at(s.week_reset, now)
             .map(|reset| format!("r{reset}"))
@@ -308,6 +328,10 @@ fn render_terse(style: Style, s: &Status, now: Option<u64>, show_reset: bool) ->
         String::new()
     };
 
+    // Compact rendering preserves the selected style's field set. Only each
+    // ingredient's representation changes, for example `ctx ... 34%` to `c34%`.
+    // When a built-in style gains or loses an ingredient, update its compact
+    // branch and tests at the same time.
     match style {
         Style::Default => format!(
             "{}|{}|{}|c{}%|w{}|{}",
@@ -318,18 +342,25 @@ fn render_terse(style: Style, s: &Status, now: Option<u64>, show_reset: bool) ->
             fmt_week_pct(s.week_pct),
             reset
         ),
-        Style::Full => format!(
-            "{}|{}|{}|c{}/{}:{}%|w{}|{}|{}",
-            s.model,
-            s.effort,
-            s.thinking,
-            fmt_tokens(s.ctx_tokens),
-            fmt_tokens(s.ctx_window),
-            s.ctx_pct,
-            fmt_week_pct(s.week_pct),
-            reset,
-            fmt_cost(s.cost_usd)
-        ),
+        Style::Full => {
+            let mut output = format!(
+                "{}|{}|{}|c{}/{}:{}%|w{}|{}|{}",
+                s.model,
+                s.effort,
+                s.thinking,
+                fmt_tokens(s.ctx_tokens),
+                fmt_tokens(s.ctx_window),
+                s.ctx_pct,
+                fmt_week_pct(s.week_pct),
+                reset,
+                fmt_cost(s.cost_usd)
+            );
+            if show_version {
+                output.push_str("|v");
+                output.push_str(VERSION);
+            }
+            output
+        }
         Style::Weekly => format!(
             "{}|c{}%|w{}|{}",
             s.model,
@@ -783,9 +814,47 @@ mod tests {
             ..Options::default()
         };
 
+        // Compact Full must include every Full-style ingredient, including
+        // version, using compact spellings.
+        assert_eq!(
+            render_at(&render_options, &status, Some(SAMPLE_NOW)),
+            "Opus 4.7|max|T|c68k/200k:34%|w41%|r2d7h|$2.31|v0.1.0"
+        );
+    }
+
+    #[test]
+    fn terse_full_output_respects_hidden_version_status() {
+        let status = sample_status();
+        let render_options = Options {
+            style: Style::Full,
+            terse: true,
+            show_version: false,
+            ..Options::default()
+        };
+
+        // Compact output must keep the same ingredients as Style::Full and only
+        // swap each ingredient to its compact representation.
         assert_eq!(
             render_at(&render_options, &status, Some(SAMPLE_NOW)),
             "Opus 4.7|max|T|c68k/200k:34%|w41%|r2d7h|$2.31"
+        );
+    }
+
+    #[test]
+    fn terse_full_output_respects_hidden_reset_status() {
+        let status = sample_status();
+        let render_options = Options {
+            style: Style::Full,
+            terse: true,
+            show_reset: false,
+            ..Options::default()
+        };
+
+        // Reset is still the same Full-style ingredient; when disabled its
+        // compact representation is the existing empty reset slot.
+        assert_eq!(
+            render_at(&render_options, &status, Some(SAMPLE_NOW)),
+            "Opus 4.7|max|T|c68k/200k:34%|w41%||$2.31|v0.1.0"
         );
     }
 

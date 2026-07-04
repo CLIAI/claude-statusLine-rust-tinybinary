@@ -15,7 +15,7 @@ make install && ./add-to-claude-settings.py --full --compact
 That writes this kind of status line:
 
 ```text
-Opus 4.7|max|T|c68k/200k:34%|w41%|r2d7h|$2.31
+Opus 4.7|max|T|c68k/200k:34%|w41%|r2d7h|$2.31|v0.1.0
 ```
 
 For capture while debugging missing fields such as `week` or `reset`:
@@ -52,11 +52,11 @@ Default style is `default`.
 
 `--style full` includes the CLI version at the end by default. Use `--version-status=off` to hide it.
 
-`--compact` or `-c` is a modifier. It keeps the selected style's fields and only removes spacing, long labels, and visual separators:
+`--compact` or `-c` is a representation modifier. It always keeps the selected style's fields and only renders each field in its compact form, removing spacing, long labels, and visual separators:
 
 ```text
 Opus 4.7|max|T|c34%|w41%|r2d7h
-Opus 4.7|max|T|c68k/200k:34%|w41%|r2d7h|$2.31
+Opus 4.7|max|T|c68k/200k:34%|w41%|r2d7h|$2.31|v0.1.0
 Opus 4.7|c34%|w41%|r2d7h
 ```
 
@@ -86,8 +86,8 @@ Format tokens:
 ```text
 Opus 4.7 │ e:max │ T:T │ ctx ███░░░░░░░ 34% │ week 41% reset:2d7h
 Opus 4.7 │ effort:max │ think:T │ ctx ███░░░░░░░ 68k/200k 34% │ week 41% reset:2d7h │ $2.31 │ v0.1.0
-Opus 4.7|max|T|c68k/200k:34%|w41%|r2d7h|$2.31
-Opus 4.7|max|T|c68k/200k:34%|w41%||$2.31
+Opus 4.7|max|T|c68k/200k:34%|w41%|r2d7h|$2.31|v0.1.0
+Opus 4.7|max|T|c68k/200k:34%|w41%||$2.31|v0.1.0
 ```
 
 Sample input:
