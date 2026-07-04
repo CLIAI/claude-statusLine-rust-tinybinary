@@ -76,19 +76,20 @@ claude-statusline-rust-tinybinary --style full
 claude-statusline-rust-tinybinary --style weekly
 claude-statusline-rust-tinybinary --style debug
 claude-statusline-rust-tinybinary -s compact
-claude-statusline-rust-tinybinary --compact
-claude-statusline-rust-tinybinary -c
 claude-statusline-rust-tinybinary --full
 claude-statusline-rust-tinybinary --full --reset-status=off
+claude-statusline-rust-tinybinary --full --compact
+claude-statusline-rust-tinybinary --weekly -c
 ```
 
 Default style is `compact`.
 
-`--style compact` is the labeled compact layout. `--compact` or `-c` is the terse layout for minimum width:
+`--compact` or `-c` is a modifier. It keeps the selected style's fields and only removes spacing, long labels, and visual separators:
 
 ```text
-max|T|c34%|w41%|r2d7h
-xhigh|T|c55%|w12%|
+Opus 4.7|max|T|c34%|w41%|r2d7h
+Opus 4.7|max|T|c68k/200k:34%|w41%|r2d7h|$2.31
+Opus 4.7|c34%|w41%|r2d7h
 ```
 
 For custom ordering, use `--format`:
