@@ -140,6 +140,10 @@ fn usage(prefix: &str) -> String {
 }
 
 fn render(style: Style, s: &Status) -> String {
+    render_at(style, s, None)
+}
+
+fn render_at(style: Style, s: &Status, now: Option<u64>) -> String {
     match style {
         Style::Compact => format!(
             "{} │ e:{} │ T:{} │ ctx {} {}% │ week {}",
@@ -148,7 +152,7 @@ fn render(style: Style, s: &Status) -> String {
             s.thinking,
             bar(s.ctx_pct, 10),
             s.ctx_pct,
-            fmt_week_compact(s.week_pct, s.week_reset)
+            fmt_week_compact(s.week_pct, s.week_reset, now)
         ),
         Style::Full => format!(
             "{} │ effort:{} │ think:{} │ ctx {} {}/{} {}% │ week {} │ {}",
@@ -159,14 +163,14 @@ fn render(style: Style, s: &Status) -> String {
             fmt_tokens(s.ctx_tokens),
             fmt_tokens(s.ctx_window),
             s.ctx_pct,
-            fmt_week_full(s.week_pct, s.week_reset),
+            fmt_week_full(s.week_pct, s.week_reset, now),
             fmt_cost(s.cost_usd)
         ),
         Style::Weekly => format!(
             "{} │ ctx {}% │ week {}",
             s.model,
             s.ctx_pct,
-            fmt_week_full(s.week_pct, s.week_reset)
+            fmt_week_full(s.week_pct, s.week_reset, now)
         ),
         Style::Debug => format!(
             "model={} effort={} thinking={} ctx_pct={} ctx_tokens={} ctx_window={} week_pct={} week_reset={}",
@@ -186,9 +190,9 @@ fn render(style: Style, s: &Status) -> String {
     }
 }
 
-fn fmt_week_compact(week_pct: Option<f64>, week_reset: Option<u64>) -> String {
+fn fmt_week_compact(week_pct: Option<f64>, week_reset: Option<u64>, now: Option<u64>) -> String {
     match week_pct {
-        Some(pct) => match fmt_reset(week_reset) {
+        Some(pct) => match fmt_reset_at(week_reset, now) {
             Some(reset) => format!("{}% reset:{reset}", fmt_percent(pct)),
             None => format!("{}%", fmt_percent(pct)),
         },
@@ -196,10 +200,10 @@ fn fmt_week_compact(week_pct: Option<f64>, week_reset: Option<u64>) -> String {
     }
 }
 
-fn fmt_week_full(week_pct: Option<f64>, week_reset: Option<u64>) -> String {
+fn fmt_week_full(week_pct: Option<f64>, week_reset: Option<u64>, now: Option<u64>) -> String {
     match week_pct {
         Some(pct) => {
-            let reset = fmt_reset(week_reset).unwrap_or_else(|| "n/a".to_string());
+            let reset = fmt_reset_at(week_reset, now).unwrap_or_else(|| "n/a".to_string());
             format!("{}% reset:{reset}", fmt_percent(pct))
         }
         None => "n/a reset:n/a".to_string(),
@@ -294,9 +298,22 @@ fn bar(percent: u64, width: usize) -> String {
 }
 
 fn fmt_reset(reset_at: Option<u64>) -> Option<String> {
+    fmt_reset_at(reset_at, current_epoch_seconds())
+}
+
+fn fmt_reset_at(reset_at: Option<u64>, now: Option<u64>) -> Option<String> {
     let reset_at = reset_at?;
-    let now = SystemTime::now().duration_since(UNIX_EPOCH).ok()?.as_secs();
+    let Some(now) = now else {
+        return fmt_reset(Some(reset_at));
+    };
     Some(fmt_duration(reset_at.saturating_sub(now)))
+}
+
+fn current_epoch_seconds() -> Option<u64> {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .ok()
+        .map(|duration| duration.as_secs())
 }
 
 fn fmt_duration(seconds: u64) -> String {
@@ -323,6 +340,38 @@ fn fmt_duration(seconds: u64) -> String {
 mod tests {
     use super::*;
     use serde_json::json;
+
+    const SAMPLE_JSON: &str = r#"{
+      "model": {
+        "id": "claude-opus-4-7",
+        "display_name": "Opus 4.7"
+      },
+      "effort": {
+        "level": "max"
+      },
+      "thinking": {
+        "enabled": true
+      },
+      "context_window": {
+        "used_percentage": 34.2,
+        "total_input_tokens": 68000,
+        "context_window_size": 200000
+      },
+      "rate_limits": {
+        "seven_day": {
+          "used_percentage": 41.4,
+          "resets_at": 1898780400
+        }
+      },
+      "workspace": {
+        "current_dir": "/home/greg/project"
+      },
+      "cost": {
+        "total_cost_usd": 2.31
+      }
+    }"#;
+
+    const SAMPLE_NOW: u64 = 1_898_780_400 - (2 * 86_400 + 7 * 3_600);
 
     #[test]
     fn formats_tokens() {
@@ -357,6 +406,64 @@ mod tests {
         assert_eq!(fmt_duration(43 * 60), "43m");
         assert_eq!(fmt_duration(0), "now");
         assert_eq!(fmt_duration(31), "now");
+    }
+
+    #[test]
+    fn renders_sample_compact_output() {
+        let value: Value = serde_json::from_str(SAMPLE_JSON).unwrap();
+        let status = Status::from_json(&value);
+
+        assert_eq!(
+            render_at(Style::Compact, &status, Some(SAMPLE_NOW)),
+            "Opus 4.7 │ e:max │ T:T │ ctx ███░░░░░░░ 34% │ week 41% reset:2d7h"
+        );
+    }
+
+    #[test]
+    fn renders_sample_full_output() {
+        let value: Value = serde_json::from_str(SAMPLE_JSON).unwrap();
+        let status = Status::from_json(&value);
+
+        assert_eq!(
+            render_at(Style::Full, &status, Some(SAMPLE_NOW)),
+            "Opus 4.7 │ effort:max │ think:T │ ctx ███░░░░░░░ 68k/200k 34% │ week 41% reset:2d7h │ $2.31"
+        );
+    }
+
+    #[test]
+    fn renders_sample_weekly_output() {
+        let value: Value = serde_json::from_str(SAMPLE_JSON).unwrap();
+        let status = Status::from_json(&value);
+
+        assert_eq!(
+            render_at(Style::Weekly, &status, Some(SAMPLE_NOW)),
+            "Opus 4.7 │ ctx 34% │ week 41% reset:2d7h"
+        );
+    }
+
+    #[test]
+    fn renders_sample_debug_output() {
+        let value: Value = serde_json::from_str(SAMPLE_JSON).unwrap();
+        let status = Status::from_json(&value);
+
+        assert_eq!(
+            render_at(Style::Debug, &status, Some(SAMPLE_NOW)),
+            "model=Opus 4.7 effort=max thinking=T ctx_pct=34 ctx_tokens=68000 ctx_window=200000 week_pct=41 week_reset=1898780400"
+        );
+    }
+
+    #[test]
+    fn renders_minimal_compact_output_with_fallbacks() {
+        let value: Value = serde_json::from_str(
+            r#"{"model":{"display_name":"Opus"},"context_window":{"used_percentage":34}}"#,
+        )
+        .unwrap();
+        let status = Status::from_json(&value);
+
+        assert_eq!(
+            render_at(Style::Compact, &status, Some(SAMPLE_NOW)),
+            "Opus │ e:na │ T:? │ ctx ███░░░░░░░ 34% │ week n/a"
+        );
     }
 
     #[test]
