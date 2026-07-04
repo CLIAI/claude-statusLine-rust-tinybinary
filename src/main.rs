@@ -1,6 +1,8 @@
 use serde_json::Value;
 use std::env;
+use std::fs::{self, OpenOptions};
 use std::io::{self, Read};
+use std::path::Path;
 use std::process;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -10,6 +12,25 @@ enum Style {
     Full,
     Weekly,
     Debug,
+}
+
+#[derive(Debug, PartialEq)]
+struct Options {
+    style: Style,
+    format: Option<String>,
+    show_reset: bool,
+    debug_log_dir: Option<String>,
+}
+
+impl Default for Options {
+    fn default() -> Self {
+        Self {
+            style: Style::Compact,
+            format: None,
+            show_reset: true,
+            debug_log_dir: None,
+        }
+    }
 }
 
 #[derive(Debug, PartialEq)]
@@ -72,8 +93,8 @@ impl Status {
 }
 
 fn main() {
-    let style = match parse_style(env::args()) {
-        Ok(style) => style,
+    let options = match parse_options(env::args()) {
+        Ok(options) => options,
         Err(msg) => {
             eprintln!("{msg}");
             process::exit(2);
@@ -87,25 +108,29 @@ fn main() {
     }
 
     let value: Value = match serde_json::from_str(&input) {
-        Ok(value) => value,
+        Ok(value) => {
+            write_debug_log(options.debug_log_dir.as_deref(), &input, Some(&value));
+            value
+        }
         Err(_) => {
+            write_debug_log(options.debug_log_dir.as_deref(), &input, None);
             print!("cc-status: bad-json");
             return;
         }
     };
 
     let status = Status::from_json(&value);
-    print!("{}", render(style, &status));
+    print!("{}", render(&options, &status));
 }
 
-fn parse_style<I, S>(args: I) -> Result<Style, String>
+fn parse_options<I, S>(args: I) -> Result<Options, String>
 where
     I: IntoIterator<Item = S>,
     S: AsRef<str>,
 {
     let mut iter = args.into_iter();
     let _program = iter.next();
-    let mut style = Style::Compact;
+    let mut options = Options::default();
 
     while let Some(arg) = iter.next() {
         match arg.as_ref() {
@@ -113,14 +138,50 @@ where
                 let Some(value) = iter.next() else {
                     return Err(usage("missing style"));
                 };
-                style = parse_style_name(value.as_ref())?;
+                options.style = parse_style_name(value.as_ref())?;
+            }
+            value if value.starts_with("--style=") => {
+                options.style = parse_style_name(&value["--style=".len()..])?;
+            }
+            "--compact" => options.style = Style::Compact,
+            "--full" => options.style = Style::Full,
+            "--weekly" => options.style = Style::Weekly,
+            "--debug" => options.style = Style::Debug,
+            "--format" => {
+                let Some(value) = iter.next() else {
+                    return Err(usage("missing format"));
+                };
+                options.format = Some(value.as_ref().to_string());
+            }
+            value if value.starts_with("--format=") => {
+                options.format = Some(value["--format=".len()..].to_string());
+            }
+            "--debug-log-dir" => {
+                let Some(value) = iter.next() else {
+                    return Err(usage("missing debug log dir"));
+                };
+                options.debug_log_dir = Some(value.as_ref().to_string());
+            }
+            value if value.starts_with("--debug-log-dir=") => {
+                options.debug_log_dir = Some(value["--debug-log-dir=".len()..].to_string());
+            }
+            "--reset-status=on" => options.show_reset = true,
+            "--reset-status=off" => options.show_reset = false,
+            "--reset-status" => {
+                let Some(value) = iter.next() else {
+                    return Err(usage("missing reset status"));
+                };
+                options.show_reset = parse_on_off(value.as_ref())?;
+            }
+            value if value.starts_with("--reset-status=") => {
+                options.show_reset = parse_on_off(&value["--reset-status=".len()..])?;
             }
             "--help" | "-h" => return Err(usage("usage")),
             other => return Err(usage(&format!("unknown argument: {other}"))),
         }
     }
 
-    Ok(style)
+    Ok(options)
 }
 
 fn parse_style_name(name: &str) -> Result<Style, String> {
@@ -133,18 +194,30 @@ fn parse_style_name(name: &str) -> Result<Style, String> {
     }
 }
 
+fn parse_on_off(value: &str) -> Result<bool, String> {
+    match value {
+        "on" => Ok(true),
+        "off" => Ok(false),
+        other => Err(usage(&format!("unknown reset status: {other}"))),
+    }
+}
+
 fn usage(prefix: &str) -> String {
     format!(
-        "{prefix}\nusage: claude-statusline-rust-tinybinary [--style compact|full|weekly|debug]"
+        "{prefix}\nusage: claude-statusline-rust-tinybinary [--style compact|full|weekly|debug] [--reset-status on|off] [--format FORMAT] [--debug-log-dir DIR]"
     )
 }
 
-fn render(style: Style, s: &Status) -> String {
-    render_at(style, s, None)
+fn render(options: &Options, s: &Status) -> String {
+    render_at(options, s, None)
 }
 
-fn render_at(style: Style, s: &Status, now: Option<u64>) -> String {
-    match style {
+fn render_at(options: &Options, s: &Status, now: Option<u64>) -> String {
+    if let Some(format) = &options.format {
+        return render_format(format, s, now, options.show_reset);
+    }
+
+    match options.style {
         Style::Compact => format!(
             "{} │ e:{} │ T:{} │ ctx {} {}% │ week {}",
             s.model,
@@ -152,7 +225,7 @@ fn render_at(style: Style, s: &Status, now: Option<u64>) -> String {
             s.thinking,
             bar(s.ctx_pct, 10),
             s.ctx_pct,
-            fmt_week_compact(s.week_pct, s.week_reset, now)
+            fmt_week_compact(s.week_pct, s.week_reset, now, options.show_reset)
         ),
         Style::Full => format!(
             "{} │ effort:{} │ think:{} │ ctx {} {}/{} {}% │ week {} │ {}",
@@ -163,14 +236,14 @@ fn render_at(style: Style, s: &Status, now: Option<u64>) -> String {
             fmt_tokens(s.ctx_tokens),
             fmt_tokens(s.ctx_window),
             s.ctx_pct,
-            fmt_week_full(s.week_pct, s.week_reset, now),
+            fmt_week_full(s.week_pct, s.week_reset, now, options.show_reset),
             fmt_cost(s.cost_usd)
         ),
         Style::Weekly => format!(
             "{} │ ctx {}% │ week {}",
             s.model,
             s.ctx_pct,
-            fmt_week_full(s.week_pct, s.week_reset, now)
+            fmt_week_full(s.week_pct, s.week_reset, now, options.show_reset)
         ),
         Style::Debug => format!(
             "model={} effort={} thinking={} ctx_pct={} ctx_tokens={} ctx_window={} week_pct={} week_reset={}",
@@ -190,24 +263,83 @@ fn render_at(style: Style, s: &Status, now: Option<u64>) -> String {
     }
 }
 
-fn fmt_week_compact(week_pct: Option<f64>, week_reset: Option<u64>, now: Option<u64>) -> String {
+fn render_format(format: &str, s: &Status, now: Option<u64>, show_reset: bool) -> String {
+    let mut out = String::new();
+    let mut chars = format.chars();
+
+    while let Some(ch) = chars.next() {
+        if ch != '%' {
+            out.push(ch);
+            continue;
+        }
+
+        match chars.next() {
+            Some('%') => out.push('%'),
+            Some('M') => out.push_str(&s.model),
+            Some('E') => out.push_str(&s.effort),
+            Some('T') => out.push_str(&s.thinking),
+            Some('w') => out.push_str(&fmt_week_pct(s.week_pct)),
+            Some('r') => {
+                if show_reset {
+                    out.push_str(&fmt_reset_label(s.week_reset, now));
+                }
+            }
+            Some('C') => out.push_str(&format!("ctx {} {}%", bar(s.ctx_pct, 10), s.ctx_pct)),
+            Some('c') => out.push_str(&fmt_cost(s.cost_usd)),
+            Some(other) => {
+                out.push('%');
+                out.push(other);
+            }
+            None => out.push('%'),
+        }
+    }
+
+    out
+}
+
+fn fmt_week_compact(
+    week_pct: Option<f64>,
+    week_reset: Option<u64>,
+    now: Option<u64>,
+    show_reset: bool,
+) -> String {
     match week_pct {
-        Some(pct) => match fmt_reset_at(week_reset, now) {
+        Some(pct) if show_reset => match fmt_reset_at(week_reset, now) {
             Some(reset) => format!("{}% reset:{reset}", fmt_percent(pct)),
             None => format!("{}%", fmt_percent(pct)),
         },
+        Some(pct) => format!("{}%", fmt_percent(pct)),
         None => "n/a".to_string(),
     }
 }
 
-fn fmt_week_full(week_pct: Option<f64>, week_reset: Option<u64>, now: Option<u64>) -> String {
+fn fmt_week_full(
+    week_pct: Option<f64>,
+    week_reset: Option<u64>,
+    now: Option<u64>,
+    show_reset: bool,
+) -> String {
     match week_pct {
-        Some(pct) => {
+        Some(pct) if show_reset => {
             let reset = fmt_reset_at(week_reset, now).unwrap_or_else(|| "n/a".to_string());
             format!("{}% reset:{reset}", fmt_percent(pct))
         }
-        None => "n/a reset:n/a".to_string(),
+        Some(pct) => format!("{}%", fmt_percent(pct)),
+        None if show_reset => "n/a reset:n/a".to_string(),
+        None => "n/a".to_string(),
     }
+}
+
+fn fmt_week_pct(week_pct: Option<f64>) -> String {
+    week_pct
+        .map(|pct| format!("{}%", fmt_percent(pct)))
+        .unwrap_or_else(|| "n/a".to_string())
+}
+
+fn fmt_reset_label(reset_at: Option<u64>, now: Option<u64>) -> String {
+    fmt_reset_at(reset_at, now)
+        .map(|reset| format!("reset:{reset}"))
+        .unwrap_or_else(|| "reset:n/a".to_string())
 }
 
 fn fmt_cost(cost: Option<f64>) -> String {
@@ -215,6 +347,71 @@ fn fmt_cost(cost: Option<f64>) -> String {
         Some(cost) if cost.is_finite() && cost >= 0.0 => format!("${cost:.2}"),
         _ => "$n/a".to_string(),
     }
+}
+
+fn write_debug_log(dir: Option<&str>, input: &str, parsed: Option<&Value>) {
+    let Some(dir) = dir else {
+        return;
+    };
+    let dir = Path::new(dir);
+    if fs::create_dir_all(dir).is_err() {
+        return;
+    }
+
+    let Some(now) = current_epoch_seconds() else {
+        return;
+    };
+    let name = format!("{}-{}.jsonl", fmt_timestamp(now), process::id());
+    let path = dir.join(name);
+    let line = match parsed {
+        Some(value) => serde_json::to_string(value).ok(),
+        None => serde_json::to_string(&serde_json::json!({
+            "bad_json": true,
+            "raw": input
+        }))
+        .ok(),
+    };
+
+    let Some(line) = line else {
+        return;
+    };
+
+    if let Ok(mut file) = OpenOptions::new().create_new(true).write(true).open(path) {
+        use std::io::Write;
+        let _ = writeln!(file, "{line}");
+    }
+}
+
+fn fmt_timestamp(epoch_seconds: u64) -> String {
+    let days = epoch_seconds / 86_400;
+    let seconds = epoch_seconds % 86_400;
+    let (year, month, day) = civil_from_days(days as i64);
+    let hour = seconds / 3_600;
+    let minute = (seconds % 3_600) / 60;
+    let second = seconds % 60;
+    format!(
+        "{:02}{:02}{:02}-{:02}{:02}{:02}",
+        year.rem_euclid(100),
+        month,
+        day,
+        hour,
+        minute,
+        second
+    )
+}
+
+fn civil_from_days(days_since_epoch: i64) -> (i32, u32, u32) {
+    let z = days_since_epoch + 719_468;
+    let era = if z >= 0 { z } else { z - 146_096 } / 146_097;
+    let doe = z - era * 146_097;
+    let yoe = (doe - doe / 1_460 + doe / 36_524 - doe / 146_096) / 365;
+    let y = yoe + era * 400;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let day = doy - (153 * mp + 2) / 5 + 1;
+    let month = mp + if mp < 10 { 3 } else { -9 };
+    let year = y + if month <= 2 { 1 } else { 0 };
+    (year as i32, month as u32, day as u32)
 }
 
 fn str_path<'a>(v: &'a Value, path: &[&str]) -> Option<&'a str> {
@@ -373,6 +570,18 @@ mod tests {
 
     const SAMPLE_NOW: u64 = 1_898_780_400 - (2 * 86_400 + 7 * 3_600);
 
+    fn options(style: Style) -> Options {
+        Options {
+            style,
+            ..Options::default()
+        }
+    }
+
+    fn sample_status() -> Status {
+        let value: Value = serde_json::from_str(SAMPLE_JSON).unwrap();
+        Status::from_json(&value)
+    }
+
     #[test]
     fn formats_tokens() {
         assert_eq!(fmt_tokens(68), "68");
@@ -410,44 +619,40 @@ mod tests {
 
     #[test]
     fn renders_sample_compact_output() {
-        let value: Value = serde_json::from_str(SAMPLE_JSON).unwrap();
-        let status = Status::from_json(&value);
+        let status = sample_status();
 
         assert_eq!(
-            render_at(Style::Compact, &status, Some(SAMPLE_NOW)),
+            render_at(&options(Style::Compact), &status, Some(SAMPLE_NOW)),
             "Opus 4.7 │ e:max │ T:T │ ctx ███░░░░░░░ 34% │ week 41% reset:2d7h"
         );
     }
 
     #[test]
     fn renders_sample_full_output() {
-        let value: Value = serde_json::from_str(SAMPLE_JSON).unwrap();
-        let status = Status::from_json(&value);
+        let status = sample_status();
 
         assert_eq!(
-            render_at(Style::Full, &status, Some(SAMPLE_NOW)),
+            render_at(&options(Style::Full), &status, Some(SAMPLE_NOW)),
             "Opus 4.7 │ effort:max │ think:T │ ctx ███░░░░░░░ 68k/200k 34% │ week 41% reset:2d7h │ $2.31"
         );
     }
 
     #[test]
     fn renders_sample_weekly_output() {
-        let value: Value = serde_json::from_str(SAMPLE_JSON).unwrap();
-        let status = Status::from_json(&value);
+        let status = sample_status();
 
         assert_eq!(
-            render_at(Style::Weekly, &status, Some(SAMPLE_NOW)),
+            render_at(&options(Style::Weekly), &status, Some(SAMPLE_NOW)),
             "Opus 4.7 │ ctx 34% │ week 41% reset:2d7h"
         );
     }
 
     #[test]
     fn renders_sample_debug_output() {
-        let value: Value = serde_json::from_str(SAMPLE_JSON).unwrap();
-        let status = Status::from_json(&value);
+        let status = sample_status();
 
         assert_eq!(
-            render_at(Style::Debug, &status, Some(SAMPLE_NOW)),
+            render_at(&options(Style::Debug), &status, Some(SAMPLE_NOW)),
             "model=Opus 4.7 effort=max thinking=T ctx_pct=34 ctx_tokens=68000 ctx_window=200000 week_pct=41 week_reset=1898780400"
         );
     }
@@ -461,8 +666,52 @@ mod tests {
         let status = Status::from_json(&value);
 
         assert_eq!(
-            render_at(Style::Compact, &status, Some(SAMPLE_NOW)),
+            render_at(&options(Style::Compact), &status, Some(SAMPLE_NOW)),
             "Opus │ e:na │ T:? │ ctx ███░░░░░░░ 34% │ week n/a"
+        );
+    }
+
+    #[test]
+    fn can_hide_reset_status() {
+        let status = sample_status();
+        let render_options = Options {
+            style: Style::Full,
+            show_reset: false,
+            ..Options::default()
+        };
+
+        assert_eq!(
+            render_at(&render_options, &status, Some(SAMPLE_NOW)),
+            "Opus 4.7 │ effort:max │ think:T │ ctx ███░░░░░░░ 68k/200k 34% │ week 41% │ $2.31"
+        );
+    }
+
+    #[test]
+    fn renders_custom_format_output() {
+        let status = sample_status();
+        let render_options = Options {
+            format: Some("%M|%E|%T|%w|%r|%C|%c".to_string()),
+            ..Options::default()
+        };
+
+        assert_eq!(
+            render_at(&render_options, &status, Some(SAMPLE_NOW)),
+            "Opus 4.7|max|T|41%|reset:2d7h|ctx ███░░░░░░░ 34%|$2.31"
+        );
+    }
+
+    #[test]
+    fn custom_format_respects_hidden_reset_status() {
+        let status = sample_status();
+        let render_options = Options {
+            format: Some("%M|%w|%r|%C".to_string()),
+            show_reset: false,
+            ..Options::default()
+        };
+
+        assert_eq!(
+            render_at(&render_options, &status, Some(SAMPLE_NOW)),
+            "Opus 4.7|41%||ctx ███░░░░░░░ 34%"
         );
     }
 
@@ -488,17 +737,74 @@ mod tests {
     #[test]
     fn parses_styles() {
         assert_eq!(
-            parse_style(["claude-statusline-rust-tinybinary", "--style", "full"]).unwrap(),
+            parse_options(["claude-statusline-rust-tinybinary", "--style", "full"])
+                .unwrap()
+                .style,
             Style::Full
         );
         assert_eq!(
-            parse_style(["claude-statusline-rust-tinybinary", "-s", "weekly"]).unwrap(),
+            parse_options(["claude-statusline-rust-tinybinary", "-s", "weekly"])
+                .unwrap()
+                .style,
             Style::Weekly
         );
         assert_eq!(
-            parse_style(["claude-statusline-rust-tinybinary"]).unwrap(),
+            parse_options(["claude-statusline-rust-tinybinary"])
+                .unwrap()
+                .style,
             Style::Compact
         );
-        assert!(parse_style(["claude-statusline-rust-tinybinary", "--style", "nope"]).is_err());
+        assert!(parse_options(["claude-statusline-rust-tinybinary", "--style", "nope"]).is_err());
+    }
+
+    #[test]
+    fn parses_option_flags() {
+        let parsed = parse_options([
+            "claude-statusline-rust-tinybinary",
+            "--full",
+            "--reset-status=off",
+            "--format",
+            "%M|%w",
+            "--debug-log-dir=/tmp/status-json",
+        ])
+        .unwrap();
+
+        assert_eq!(parsed.style, Style::Full);
+        assert_eq!(parsed.format.as_deref(), Some("%M|%w"));
+        assert!(!parsed.show_reset);
+        assert_eq!(parsed.debug_log_dir.as_deref(), Some("/tmp/status-json"));
+    }
+
+    #[test]
+    fn formats_debug_log_timestamp() {
+        assert_eq!(fmt_timestamp(0), "700101-000000");
+        assert_eq!(fmt_timestamp(1_704_067_200), "240101-000000");
+    }
+
+    #[test]
+    fn writes_debug_log_jsonl() {
+        let dir = std::env::temp_dir().join(format!(
+            "claude-statusline-rust-tinybinary-test-{}",
+            process::id()
+        ));
+        let _ = fs::remove_dir_all(&dir);
+        let value: Value = serde_json::from_str(SAMPLE_JSON).unwrap();
+
+        write_debug_log(dir.to_str(), SAMPLE_JSON, Some(&value));
+
+        let mut entries = fs::read_dir(&dir).unwrap();
+        let path = entries.next().unwrap().unwrap().path();
+        assert!(entries.next().is_none());
+        assert!(path
+            .file_name()
+            .unwrap()
+            .to_string_lossy()
+            .ends_with(".jsonl"));
+
+        let logged = fs::read_to_string(&path).unwrap();
+        let logged_value: Value = serde_json::from_str(logged.trim_end()).unwrap();
+        assert_eq!(logged_value["model"]["display_name"], "Opus 4.7");
+
+        let _ = fs::remove_dir_all(&dir);
     }
 }
