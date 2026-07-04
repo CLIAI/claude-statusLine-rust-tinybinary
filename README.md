@@ -238,12 +238,15 @@ There is no TUI, daemon, background service, network call, async runtime, loggin
 make
 make build
 make test
+make integration-tests
 make size
 make sample
 make install
 make uninstall
 make clean
 ```
+
+`make integration-tests` runs the Docker/tmux Claude Code integration harness and removes its container when done. Use `make integration-tests-keep-docker-artifacts` to keep the container for inspection, and `make clean-docker-artifacts` to remove kept artifacts. Details are in [integration-tests/README.md](integration-tests/README.md).
 
 Manual smoke test:
 
