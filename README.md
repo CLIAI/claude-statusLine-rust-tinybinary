@@ -42,11 +42,15 @@ claude-statusline-rust-tinybinary --style debug
 claude-statusline-rust-tinybinary -s default
 claude-statusline-rust-tinybinary --full
 claude-statusline-rust-tinybinary --full --reset-status=off
+claude-statusline-rust-tinybinary --full --version-status=off
 claude-statusline-rust-tinybinary --full --compact
 claude-statusline-rust-tinybinary --weekly -c
+claude-statusline-rust-tinybinary --version
 ```
 
 Default style is `default`.
+
+`--style full` includes the CLI version at the end by default. Use `--version-status=off` to hide it.
 
 `--compact` or `-c` is a modifier. It keeps the selected style's fields and only removes spacing, long labels, and visual separators:
 
@@ -59,7 +63,7 @@ Opus 4.7|c34%|w41%|r2d7h
 For custom ordering, use `--format`:
 
 ```bash
-claude-statusline-rust-tinybinary --format '%M|%E|%T|%w|%r|%C|%c'
+claude-statusline-rust-tinybinary --format '%M|%E|%T|%w|%r|%C|%c|%v'
 ```
 
 Format tokens:
@@ -71,15 +75,17 @@ Format tokens:
 - `%r` reset status
 - `%C` context summary
 - `%c` cost
+- `%v` CLI version
 - `%%` literal percent sign
 
 `--reset-status=off` hides reset output in built-in styles and makes `%r` render as empty in custom formats.
+`--version-status=off` hides version output in `--style full` and makes `%v` render as empty in custom formats.
 
 ## Example output
 
 ```text
 Opus 4.7 │ e:max │ T:T │ ctx ███░░░░░░░ 34% │ week 41% reset:2d7h
-Opus 4.7 │ effort:max │ think:T │ ctx ███░░░░░░░ 68k/200k 34% │ week 41% reset:2d7h │ $2.31
+Opus 4.7 │ effort:max │ think:T │ ctx ███░░░░░░░ 68k/200k 34% │ week 41% reset:2d7h │ $2.31 │ v0.1.0
 Opus 4.7|max|T|c68k/200k:34%|w41%|r2d7h|$2.31
 Opus 4.7|max|T|c68k/200k:34%|w41%||$2.31
 ```

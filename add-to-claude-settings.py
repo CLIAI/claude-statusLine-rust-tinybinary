@@ -21,7 +21,7 @@ def parser() -> argparse.ArgumentParser:
         epilog="""examples:
   make install && ./add-to-claude-settings.py --full --compact
   ./add-to-claude-settings.py --style default --debug-log-dir ~/.cache/claude-statusline-rust-tinybinary
-  ./add-to-claude-settings.py --format '%M|%E|%T|%w|%r|%C|%c'
+  ./add-to-claude-settings.py --format '%M|%E|%T|%w|%r|%C|%c|%v'
 """,
     )
     p.add_argument(
@@ -63,6 +63,11 @@ def parser() -> argparse.ArgumentParser:
         choices=["on", "off"],
         help="add --reset-status on|off",
     )
+    p.add_argument(
+        "--version-status",
+        choices=["on", "off"],
+        help="add --version-status on|off",
+    )
     p.add_argument("--format", help="add custom statusline render format")
     p.add_argument("--debug-log-dir", help="capture received Claude JSON into this directory")
     return p
@@ -85,6 +90,8 @@ def command_args(args: argparse.Namespace) -> list[str]:
         out.append("--compact")
     if args.reset_status:
         out.append(f"--reset-status={args.reset_status}")
+    if args.version_status:
+        out.append(f"--version-status={args.version_status}")
     if args.format:
         out += ["--format", args.format]
     if args.debug_log_dir:

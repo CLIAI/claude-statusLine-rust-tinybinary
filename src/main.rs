@@ -6,6 +6,8 @@ use std::path::Path;
 use std::process;
 use std::time::{SystemTime, UNIX_EPOCH};
 
+const VERSION: &str = env!("CARGO_PKG_VERSION");
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Style {
     Default,
@@ -19,6 +21,8 @@ struct Options {
     style: Style,
     format: Option<String>,
     show_reset: bool,
+    show_version: bool,
+    print_version: bool,
     debug_log_dir: Option<String>,
     terse: bool,
 }
@@ -29,6 +33,8 @@ impl Default for Options {
             style: Style::Default,
             format: None,
             show_reset: true,
+            show_version: true,
+            print_version: false,
             debug_log_dir: None,
             terse: false,
         }
@@ -102,6 +108,11 @@ fn main() {
             process::exit(2);
         }
     };
+
+    if options.print_version {
+        println!("{VERSION}");
+        return;
+    }
 
     let mut input = String::new();
     if io::stdin().read_to_string(&mut input).is_err() {
@@ -178,6 +189,18 @@ where
             value if value.starts_with("--reset-status=") => {
                 options.show_reset = parse_on_off(&value["--reset-status=".len()..])?;
             }
+            "--version-status=on" => options.show_version = true,
+            "--version-status=off" => options.show_version = false,
+            "--version-status" => {
+                let Some(value) = iter.next() else {
+                    return Err(usage("missing version status"));
+                };
+                options.show_version = parse_on_off(value.as_ref())?;
+            }
+            value if value.starts_with("--version-status=") => {
+                options.show_version = parse_on_off(&value["--version-status=".len()..])?;
+            }
+            "--version" | "-V" => options.print_version = true,
             "--help" | "-h" => return Err(usage("usage")),
             other => return Err(usage(&format!("unknown argument: {other}"))),
         }
@@ -206,7 +229,7 @@ fn parse_on_off(value: &str) -> Result<bool, String> {
 
 fn usage(prefix: &str) -> String {
     format!(
-        "{prefix}\nusage: claude-statusline-rust-tinybinary [--style default|full|weekly|debug] [--compact|-c] [--reset-status on|off] [--format FORMAT] [--debug-log-dir DIR]"
+        "{prefix}\nusage: claude-statusline-rust-tinybinary [--style default|full|weekly|debug] [--compact|-c] [--reset-status on|off] [--version-status on|off] [--format FORMAT] [--debug-log-dir DIR] [--version|-V]"
     )
 }
 
@@ -216,7 +239,7 @@ fn render(options: &Options, s: &Status) -> String {
 
 fn render_at(options: &Options, s: &Status, now: Option<u64>) -> String {
     if let Some(format) = &options.format {
-        return render_format(format, s, now, options.show_reset);
+        return render_format(format, s, now, options.show_reset, options.show_version);
     }
 
     if options.terse {
@@ -233,18 +256,25 @@ fn render_at(options: &Options, s: &Status, now: Option<u64>) -> String {
             s.ctx_pct,
             fmt_week_compact(s.week_pct, s.week_reset, now, options.show_reset)
         ),
-        Style::Full => format!(
-            "{} │ effort:{} │ think:{} │ ctx {} {}/{} {}% │ week {} │ {}",
-            s.model,
-            s.effort,
-            s.thinking,
-            bar(s.ctx_pct, 10),
-            fmt_tokens(s.ctx_tokens),
-            fmt_tokens(s.ctx_window),
-            s.ctx_pct,
-            fmt_week_full(s.week_pct, s.week_reset, now, options.show_reset),
-            fmt_cost(s.cost_usd)
-        ),
+        Style::Full => {
+            let mut output = format!(
+                "{} │ effort:{} │ think:{} │ ctx {} {}/{} {}% │ week {} │ {}",
+                s.model,
+                s.effort,
+                s.thinking,
+                bar(s.ctx_pct, 10),
+                fmt_tokens(s.ctx_tokens),
+                fmt_tokens(s.ctx_window),
+                s.ctx_pct,
+                fmt_week_full(s.week_pct, s.week_reset, now, options.show_reset),
+                fmt_cost(s.cost_usd)
+            );
+            if options.show_version {
+                output.push_str(" │ v");
+                output.push_str(VERSION);
+            }
+            output
+        }
         Style::Weekly => format!(
             "{} │ ctx {}% │ week {}",
             s.model,
@@ -325,7 +355,13 @@ fn render_terse(style: Style, s: &Status, now: Option<u64>, show_reset: bool) ->
     }
 }
 
-fn render_format(format: &str, s: &Status, now: Option<u64>, show_reset: bool) -> String {
+fn render_format(
+    format: &str,
+    s: &Status,
+    now: Option<u64>,
+    show_reset: bool,
+    show_version: bool,
+) -> String {
     let mut out = String::new();
     let mut chars = format.chars();
 
@@ -348,6 +384,11 @@ fn render_format(format: &str, s: &Status, now: Option<u64>, show_reset: bool) -
             }
             Some('C') => out.push_str(&format!("ctx {} {}%", bar(s.ctx_pct, 10), s.ctx_pct)),
             Some('c') => out.push_str(&fmt_cost(s.cost_usd)),
+            Some('v') => {
+                if show_version {
+                    out.push_str(VERSION);
+                }
+            }
             Some(other) => {
                 out.push('%');
                 out.push(other);
@@ -695,7 +736,7 @@ mod tests {
 
         assert_eq!(
             render_at(&options(Style::Full), &status, Some(SAMPLE_NOW)),
-            "Opus 4.7 │ effort:max │ think:T │ ctx ███░░░░░░░ 68k/200k 34% │ week 41% reset:2d7h │ $2.31"
+            "Opus 4.7 │ effort:max │ think:T │ ctx ███░░░░░░░ 68k/200k 34% │ week 41% reset:2d7h │ $2.31 │ v0.1.0"
         );
     }
 
@@ -836,7 +877,22 @@ mod tests {
 
         assert_eq!(
             render_at(&render_options, &status, Some(SAMPLE_NOW)),
-            "Opus 4.7 │ effort:max │ think:T │ ctx ███░░░░░░░ 68k/200k 34% │ week 41% │ $2.31"
+            "Opus 4.7 │ effort:max │ think:T │ ctx ███░░░░░░░ 68k/200k 34% │ week 41% │ $2.31 │ v0.1.0"
+        );
+    }
+
+    #[test]
+    fn full_output_respects_hidden_version_status() {
+        let status = sample_status();
+        let render_options = Options {
+            style: Style::Full,
+            show_version: false,
+            ..Options::default()
+        };
+
+        assert_eq!(
+            render_at(&render_options, &status, Some(SAMPLE_NOW)),
+            "Opus 4.7 │ effort:max │ think:T │ ctx ███░░░░░░░ 68k/200k 34% │ week 41% reset:2d7h │ $2.31"
         );
     }
 
@@ -844,13 +900,13 @@ mod tests {
     fn renders_custom_format_output() {
         let status = sample_status();
         let render_options = Options {
-            format: Some("%M|%E|%T|%w|%r|%C|%c".to_string()),
+            format: Some("%M|%E|%T|%w|%r|%C|%c|%v".to_string()),
             ..Options::default()
         };
 
         assert_eq!(
             render_at(&render_options, &status, Some(SAMPLE_NOW)),
-            "Opus 4.7|max|T|41%|reset:2d7h|ctx ███░░░░░░░ 34%|$2.31"
+            "Opus 4.7|max|T|41%|reset:2d7h|ctx ███░░░░░░░ 34%|$2.31|0.1.0"
         );
     }
 
@@ -866,6 +922,21 @@ mod tests {
         assert_eq!(
             render_at(&render_options, &status, Some(SAMPLE_NOW)),
             "Opus 4.7|41%||ctx ███░░░░░░░ 34%"
+        );
+    }
+
+    #[test]
+    fn custom_format_respects_hidden_version_status() {
+        let status = sample_status();
+        let render_options = Options {
+            format: Some("%M|%v|%C".to_string()),
+            show_version: false,
+            ..Options::default()
+        };
+
+        assert_eq!(
+            render_at(&render_options, &status, Some(SAMPLE_NOW)),
+            "Opus 4.7||ctx ███░░░░░░░ 34%"
         );
     }
 
@@ -929,20 +1000,38 @@ mod tests {
     }
 
     #[test]
+    fn parses_version_flag_without_stealing_format_values() {
+        assert!(
+            parse_options(["claude-statusline-rust-tinybinary", "--version"])
+                .unwrap()
+                .print_version
+        );
+        assert_eq!(
+            parse_options(["claude-statusline-rust-tinybinary", "--format", "--version"])
+                .unwrap()
+                .format
+                .as_deref(),
+            Some("--version")
+        );
+    }
+
+    #[test]
     fn parses_option_flags() {
         let parsed = parse_options([
             "claude-statusline-rust-tinybinary",
             "--full",
             "--reset-status=off",
+            "--version-status=off",
             "--format",
-            "%M|%w",
+            "%M|%w|%v",
             "--debug-log-dir=/tmp/status-json",
         ])
         .unwrap();
 
         assert_eq!(parsed.style, Style::Full);
-        assert_eq!(parsed.format.as_deref(), Some("%M|%w"));
+        assert_eq!(parsed.format.as_deref(), Some("%M|%w|%v"));
         assert!(!parsed.show_reset);
+        assert!(!parsed.show_version);
         assert_eq!(parsed.debug_log_dir.as_deref(), Some("/tmp/status-json"));
     }
 
