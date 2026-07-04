@@ -16,6 +16,11 @@ When adding, removing, or toggling a field in a built-in style:
 - keep docs examples aligned with the default visible fields
 
 Optional display switches follow the same rule. If `--style full` includes
-version by default, then `--style full --compact` must include the compact
-version ingredient by default too. If `--version-status=off` hides it in full
-style, it must hide it in compact full style and `%v` formats as well.
+the Claude Code version by default, then `--style full --compact` must include
+the compact Claude Code version ingredient by default too. If
+`--version-status=off` hides it in full style, it must hide it in compact full
+style and `%v` formats as well.
+
+The rendered version ingredient comes from the status-line JSON `version` field.
+Do not use this helper binary's Cargo package version for status output; that is
+only for the standalone `--version` CLI flag.

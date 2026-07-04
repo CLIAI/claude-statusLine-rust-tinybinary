@@ -15,7 +15,7 @@ make install && ./add-to-claude-settings.py --full --compact
 That writes this kind of status line:
 
 ```text
-Opus 4.7|max|T|c68k/200k:34%|w41%|r2d7h|$2.31|v0.1.0
+Opus 4.7|max|T|c68k/200k:34%|w41%|r2d7h|$2.31|v2.1.201
 ```
 
 For capture while debugging missing fields such as `week` or `reset`:
@@ -50,13 +50,13 @@ claude-statusline-rust-tinybinary --version
 
 Default style is `default`.
 
-`--style full` includes the CLI version at the end by default. Use `--version-status=off` to hide it.
+`--style full` includes the Claude Code version from status-line JSON at the end by default. Use `--version-status=off` to hide it. The standalone `--version` flag prints this helper binary's version instead.
 
 `--compact` or `-c` is a representation modifier. It always keeps the selected style's fields and only renders each field in its compact form, removing spacing, long labels, and visual separators:
 
 ```text
 Opus 4.7|max|T|c34%|w41%|r2d7h
-Opus 4.7|max|T|c68k/200k:34%|w41%|r2d7h|$2.31|v0.1.0
+Opus 4.7|max|T|c68k/200k:34%|w41%|r2d7h|$2.31|v2.1.201
 Opus 4.7|c34%|w41%|r2d7h
 ```
 
@@ -75,7 +75,7 @@ Format tokens:
 - `%r` reset status
 - `%C` context summary
 - `%c` cost
-- `%v` CLI version
+- `%v` Claude Code version from status-line JSON
 - `%%` literal percent sign
 
 `--reset-status=off` hides reset output in built-in styles and makes `%r` render as empty in custom formats.
@@ -85,9 +85,9 @@ Format tokens:
 
 ```text
 Opus 4.7 │ e:max │ T:T │ ctx ███░░░░░░░ 34% │ week 41% reset:2d7h
-Opus 4.7 │ effort:max │ think:T │ ctx ███░░░░░░░ 68k/200k 34% │ week 41% reset:2d7h │ $2.31 │ v0.1.0
-Opus 4.7|max|T|c68k/200k:34%|w41%|r2d7h|$2.31|v0.1.0
-Opus 4.7|max|T|c68k/200k:34%|w41%||$2.31|v0.1.0
+Opus 4.7 │ effort:max │ think:T │ ctx ███░░░░░░░ 68k/200k 34% │ week 41% reset:2d7h │ $2.31 │ v2.1.201
+Opus 4.7|max|T|c68k/200k:34%|w41%|r2d7h|$2.31|v2.1.201
+Opus 4.7|max|T|c68k/200k:34%|w41%||$2.31|v2.1.201
 ```
 
 Sample input:
@@ -98,6 +98,7 @@ Sample input:
     "id": "claude-opus-4-7",
     "display_name": "Opus 4.7"
   },
+  "version": "2.1.201",
   "effort": {
     "level": "max"
   },

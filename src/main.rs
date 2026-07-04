@@ -6,7 +6,9 @@ use std::path::Path;
 use std::process;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-const VERSION: &str = env!("CARGO_PKG_VERSION");
+// This is this helper binary's version for `--version`; status output uses
+// Claude Code's `version` field from stdin JSON.
+const TOOL_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Style {
@@ -21,8 +23,8 @@ struct Options {
     style: Style,
     format: Option<String>,
     show_reset: bool,
-    show_version: bool,
-    print_version: bool,
+    show_claude_version: bool,
+    print_tool_version: bool,
     debug_log_dir: Option<String>,
     // `--compact` must not change which fields a style contains. It only
     // selects compact renderings for the same ingredients.
@@ -35,8 +37,8 @@ impl Default for Options {
             style: Style::Default,
             format: None,
             show_reset: true,
-            show_version: true,
-            print_version: false,
+            show_claude_version: true,
+            print_tool_version: false,
             debug_log_dir: None,
             terse: false,
         }
@@ -46,6 +48,7 @@ impl Default for Options {
 #[derive(Debug, PartialEq)]
 struct Status {
     model: String,
+    version: String,
     effort: String,
     thinking: String,
     ctx_pct: u64,
@@ -63,6 +66,8 @@ impl Status {
             .or_else(|| str_path(v, &["model", "id"]))
             .unwrap_or("?")
             .to_string();
+
+        let version = str_path(v, &["version"]).unwrap_or("n/a").to_string();
 
         let effort = str_path(v, &["effort", "level"])
             .unwrap_or("na")
@@ -89,6 +94,7 @@ impl Status {
 
         Self {
             model,
+            version,
             effort,
             thinking,
             ctx_pct,
@@ -111,8 +117,8 @@ fn main() {
         }
     };
 
-    if options.print_version {
-        println!("{VERSION}");
+    if options.print_tool_version {
+        println!("{TOOL_VERSION}");
         return;
     }
 
@@ -193,18 +199,18 @@ where
             value if value.starts_with("--reset-status=") => {
                 options.show_reset = parse_on_off(&value["--reset-status=".len()..])?;
             }
-            "--version-status=on" => options.show_version = true,
-            "--version-status=off" => options.show_version = false,
+            "--version-status=on" => options.show_claude_version = true,
+            "--version-status=off" => options.show_claude_version = false,
             "--version-status" => {
                 let Some(value) = iter.next() else {
                     return Err(usage("missing version status"));
                 };
-                options.show_version = parse_on_off(value.as_ref())?;
+                options.show_claude_version = parse_on_off(value.as_ref())?;
             }
             value if value.starts_with("--version-status=") => {
-                options.show_version = parse_on_off(&value["--version-status=".len()..])?;
+                options.show_claude_version = parse_on_off(&value["--version-status=".len()..])?;
             }
-            "--version" | "-V" => options.print_version = true,
+            "--version" | "-V" => options.print_tool_version = true,
             "--help" | "-h" => return Err(usage("usage")),
             other => return Err(usage(&format!("unknown argument: {other}"))),
         }
@@ -243,7 +249,13 @@ fn render(options: &Options, s: &Status) -> String {
 
 fn render_at(options: &Options, s: &Status, now: Option<u64>) -> String {
     if let Some(format) = &options.format {
-        return render_format(format, s, now, options.show_reset, options.show_version);
+        return render_format(
+            format,
+            s,
+            now,
+            options.show_reset,
+            options.show_claude_version,
+        );
     }
 
     // `--compact` is a representation modifier: it keeps the selected style's
@@ -254,7 +266,7 @@ fn render_at(options: &Options, s: &Status, now: Option<u64>) -> String {
             s,
             now,
             options.show_reset,
-            options.show_version,
+            options.show_claude_version,
         );
     }
 
@@ -283,9 +295,9 @@ fn render_at(options: &Options, s: &Status, now: Option<u64>) -> String {
                 fmt_week_full(s.week_pct, s.week_reset, now, options.show_reset),
                 fmt_cost(s.cost_usd)
             );
-            if options.show_version {
+            if options.show_claude_version {
                 output.push_str(" │ v");
-                output.push_str(VERSION);
+                output.push_str(&s.version);
             }
             output
         }
@@ -318,7 +330,7 @@ fn render_terse(
     s: &Status,
     now: Option<u64>,
     show_reset: bool,
-    show_version: bool,
+    show_claude_version: bool,
 ) -> String {
     let reset = if show_reset {
         fmt_reset_at(s.week_reset, now)
@@ -355,9 +367,9 @@ fn render_terse(
                 reset,
                 fmt_cost(s.cost_usd)
             );
-            if show_version {
+            if show_claude_version {
                 output.push_str("|v");
-                output.push_str(VERSION);
+                output.push_str(&s.version);
             }
             output
         }
@@ -391,7 +403,7 @@ fn render_format(
     s: &Status,
     now: Option<u64>,
     show_reset: bool,
-    show_version: bool,
+    show_claude_version: bool,
 ) -> String {
     let mut out = String::new();
     let mut chars = format.chars();
@@ -416,8 +428,8 @@ fn render_format(
             Some('C') => out.push_str(&format!("ctx {} {}%", bar(s.ctx_pct, 10), s.ctx_pct)),
             Some('c') => out.push_str(&fmt_cost(s.cost_usd)),
             Some('v') => {
-                if show_version {
-                    out.push_str(VERSION);
+                if show_claude_version {
+                    out.push_str(&s.version);
                 }
             }
             Some(other) => {
@@ -677,6 +689,7 @@ mod tests {
         "id": "claude-opus-4-7",
         "display_name": "Opus 4.7"
       },
+      "version": "2.1.201",
       "effort": {
         "level": "max"
       },
@@ -767,7 +780,7 @@ mod tests {
 
         assert_eq!(
             render_at(&options(Style::Full), &status, Some(SAMPLE_NOW)),
-            "Opus 4.7 │ effort:max │ think:T │ ctx ███░░░░░░░ 68k/200k 34% │ week 41% reset:2d7h │ $2.31 │ v0.1.0"
+            "Opus 4.7 │ effort:max │ think:T │ ctx ███░░░░░░░ 68k/200k 34% │ week 41% reset:2d7h │ $2.31 │ v2.1.201"
         );
     }
 
@@ -818,7 +831,7 @@ mod tests {
         // version, using compact spellings.
         assert_eq!(
             render_at(&render_options, &status, Some(SAMPLE_NOW)),
-            "Opus 4.7|max|T|c68k/200k:34%|w41%|r2d7h|$2.31|v0.1.0"
+            "Opus 4.7|max|T|c68k/200k:34%|w41%|r2d7h|$2.31|v2.1.201"
         );
     }
 
@@ -828,7 +841,7 @@ mod tests {
         let render_options = Options {
             style: Style::Full,
             terse: true,
-            show_version: false,
+            show_claude_version: false,
             ..Options::default()
         };
 
@@ -854,7 +867,7 @@ mod tests {
         // compact representation is the existing empty reset slot.
         assert_eq!(
             render_at(&render_options, &status, Some(SAMPLE_NOW)),
-            "Opus 4.7|max|T|c68k/200k:34%|w41%||$2.31|v0.1.0"
+            "Opus 4.7|max|T|c68k/200k:34%|w41%||$2.31|v2.1.201"
         );
     }
 
@@ -946,7 +959,7 @@ mod tests {
 
         assert_eq!(
             render_at(&render_options, &status, Some(SAMPLE_NOW)),
-            "Opus 4.7 │ effort:max │ think:T │ ctx ███░░░░░░░ 68k/200k 34% │ week 41% │ $2.31 │ v0.1.0"
+            "Opus 4.7 │ effort:max │ think:T │ ctx ███░░░░░░░ 68k/200k 34% │ week 41% │ $2.31 │ v2.1.201"
         );
     }
 
@@ -955,7 +968,7 @@ mod tests {
         let status = sample_status();
         let render_options = Options {
             style: Style::Full,
-            show_version: false,
+            show_claude_version: false,
             ..Options::default()
         };
 
@@ -975,7 +988,7 @@ mod tests {
 
         assert_eq!(
             render_at(&render_options, &status, Some(SAMPLE_NOW)),
-            "Opus 4.7|max|T|41%|reset:2d7h|ctx ███░░░░░░░ 34%|$2.31|0.1.0"
+            "Opus 4.7|max|T|41%|reset:2d7h|ctx ███░░░░░░░ 34%|$2.31|2.1.201"
         );
     }
 
@@ -999,7 +1012,7 @@ mod tests {
         let status = sample_status();
         let render_options = Options {
             format: Some("%M|%v|%C".to_string()),
-            show_version: false,
+            show_claude_version: false,
             ..Options::default()
         };
 
@@ -1007,6 +1020,13 @@ mod tests {
             render_at(&render_options, &status, Some(SAMPLE_NOW)),
             "Opus 4.7||ctx ███░░░░░░░ 34%"
         );
+    }
+
+    #[test]
+    fn extracts_claude_version_from_status_json() {
+        let status = sample_status();
+
+        assert_eq!(status.version, "2.1.201");
     }
 
     #[test]
@@ -1019,6 +1039,7 @@ mod tests {
         let status = Status::from_json(&value);
 
         assert_eq!(status.model, "claude-opus-4-7");
+        assert_eq!(status.version, "n/a");
         assert_eq!(status.effort, "na");
         assert_eq!(status.thinking, "?");
         assert_eq!(status.ctx_pct, 34);
@@ -1073,7 +1094,7 @@ mod tests {
         assert!(
             parse_options(["claude-statusline-rust-tinybinary", "--version"])
                 .unwrap()
-                .print_version
+                .print_tool_version
         );
         assert_eq!(
             parse_options(["claude-statusline-rust-tinybinary", "--format", "--version"])
@@ -1100,7 +1121,7 @@ mod tests {
         assert_eq!(parsed.style, Style::Full);
         assert_eq!(parsed.format.as_deref(), Some("%M|%w|%v"));
         assert!(!parsed.show_reset);
-        assert!(!parsed.show_version);
+        assert!(!parsed.show_claude_version);
         assert_eq!(parsed.debug_log_dir.as_deref(), Some("/tmp/status-json"));
     }
 
